@@ -1,11 +1,20 @@
 LDTaxi = LDTaxi or {}
 LDTaxi.Dispatch = {}
 
+function LDTaxi.Dispatch.GetActive()
+    return MySQL.query.await([[
+        SELECT identifier, name, slot_number, started_at
+        FROM ld_taxi_dispatchers
+        WHERE active = 1
+        ORDER BY slot_number ASC
+    ]])
+end
+
 function LDTaxi.Dispatch.Take(source)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
 
-    local active = MySQL.query.await('SELECT * FROM ld_taxi_dispatchers WHERE active = 1 ORDER BY slot_number ASC')
+    local active = LDTaxi.Dispatch.GetActive()
     if #active >= Config.MaxDispatchers then
         return false, 'Es sind bereits zwei Leitstellen aktiv.'
     end
