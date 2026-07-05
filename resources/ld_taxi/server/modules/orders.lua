@@ -57,3 +57,96 @@ function LDTaxi.Orders.GetOpen()
         ORDER BY created_at ASC
     ]])
 end
+
+function LDTaxi.Orders.Get(orderId)
+    return MySQL.single.await('SELECT * FROM ld_taxi_orders WHERE id = ?', { tonumber(orderId) or 0 })
+end
+
+function LDTaxi.Orders.Accept(orderId, source)
+    local xPlayer = LDTaxi.Utils.Player(source)
+    if not xPlayer then return false, 'Spieler nicht gefunden.' end
+
+    local order = LDTaxi.Orders.Get(orderId)
+    if not order then return false, 'Auftrag nicht gefunden.' end
+    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
+        return false, 'Auftrag ist bereits vergeben.'
+    end
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_orders
+        SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW()
+        WHERE id = ?
+    ]], { OrderStatus.Accepted, xPlayer.identifier, xPlayer.getName(), tonumber(orderId) })
+
+    LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.EnRoute)
+    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderAccepted, 'Auftrag angenommen', xPlayer.identifier)
+    LDTaxiEventBus.Emit(TaxiEvents.OrderAccepted, { orderId = orderId, driver = xPlayer.identifier })
+
+    return true, 'Auftrag angenommen.'
+end
+
+function LDTaxi.Orders.SetStatus(orderId, source, status, driverStatus, message)
+    local xPlayer = LDTaxi.Utils.Player(source)
+    if not xPlayer then return false, 'Spieler nicht gefunden.' end
+
+    local order = LDTaxi.Orders.Get(orderId)
+    if not order then return false, 'Auftrag nicht gefunden.' end
+    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
+        return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
+    end
+
+    MySQL.update.await('UPDATE ld_taxi_orders SET status = ?, updated_at = NOW() WHERE id = ?', { status, tonumber(orderId) })
+
+    if driverStatus then
+        LDTaxi.Drivers.SetStatus(xPlayer.identifier, driverStatus)
+    end
+
+    LDTaxi.Orders.AddHistory(orderId, 'order.status_changed', message or status, xPlayer.identifier, { status = status })
+    LDTaxiEventBus.Emit('order.status_changed', { orderId = orderId, status = status, driver = xPlayer.identifier })
+
+    return true, message or 'Status geändert.'
+end
+
+function LDTaxi.Orders.Return(orderId, source, reason)
+    local xPlayer = LDTaxi.Utils.Player(source)
+    if not xPlayer then return false, 'Spieler nicht gefunden.' end
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_orders
+        SET status = ?, assigned_driver = NULL, assigned_driver_name = NULL, updated_at = NOW()
+        WHERE id = ?
+    ]], { OrderStatus.Returned, tonumber(orderId) })
+
+    LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
+    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderReturned, reason or 'Auftrag zurückgegeben', xPlayer.identifier)
+    LDTaxiEventBus.Emit(TaxiEvents.OrderReturned, { orderId = orderId, driver = xPlayer.identifier, reason = reason or '' })
+
+    return true, 'Auftrag zurückgegeben.'
+end
+
+function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
+    local xPlayer = LDTaxi.Utils.Player(source)
+    if not xPlayer then return false, 'Spieler nicht gefunden.' end
+
+    local fare = LDTaxi.Utils.CalculateFare(distanceKm)
+    local charged = tonumber(chargedAmount) or fare
+    local tip = charged - fare
+    if tip < 0 then tip = 0 end
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_orders
+        SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?, updated_at = NOW(), completed_at = NOW()
+        WHERE id = ?
+    ]], { OrderStatus.Completed, tonumber(distanceKm) or 0, fare, charged, tip, tonumber(orderId) })
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_drivers
+        SET status = ?, total_orders = total_orders + 1, total_distance = total_distance + ?, last_order_at = NOW()
+        WHERE identifier = ?
+    ]], { DriverStatus.Available, tonumber(distanceKm) or 0, xPlayer.identifier })
+
+    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCompleted, 'Auftrag abgeschlossen', xPlayer.identifier, { fare = fare, charged = charged, tip = tip })
+    LDTaxiEventBus.Emit(TaxiEvents.OrderCompleted, { orderId = orderId, driver = xPlayer.identifier, fare = fare, charged = charged, tip = tip })
+
+    return true, ('Auftrag abgeschlossen. Trinkgeld: %s $'):format(tip)
+end
