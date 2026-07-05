@@ -8,6 +8,14 @@ function LDTaxi.Drivers.SetStatus(identifier, status)
     })
 end
 
+function LDTaxi.Drivers.GetAll()
+    return MySQL.query.await([[
+        SELECT identifier, name, status, rank_label, is_management, last_login, total_orders, total_distance, total_duty_minutes
+        FROM ld_taxi_drivers
+        ORDER BY FIELD(status, 'dispatch', 'available', 'assigned', 'en_route', 'arrived', 'in_ride', 'delivery', 'pause', 'offline'), name ASC
+    ]])
+end
+
 function LDTaxi.Drivers.ClockIn(source)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false end
