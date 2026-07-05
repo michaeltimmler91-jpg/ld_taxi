@@ -25,6 +25,17 @@ local function SendTabletData(src)
     })
 end
 
+local function BroadcastTabletData()
+    for _, playerId in ipairs(GetPlayers()) do
+        SendTabletData(tonumber(playerId))
+    end
+end
+
+local function NotifyAndSync(src, msg)
+    if msg then TriggerClientEvent('ld_taxi:client:notify', src, msg) end
+    BroadcastTabletData()
+end
+
 RegisterNetEvent('ld_taxi:server:requestTabletData', function()
     SendTabletData(source)
 end)
@@ -32,30 +43,56 @@ end)
 RegisterNetEvent('ld_taxi:server:clockIn', function()
     local src = source
     if LDTaxi.Drivers.ClockIn(src) then
-        TriggerClientEvent('ld_taxi:client:notify', src, 'Dienst begonnen.')
-        SendTabletData(src)
+        NotifyAndSync(src, 'Dienst begonnen.')
     end
 end)
 
 RegisterNetEvent('ld_taxi:server:clockOut', function()
     local src = source
     LDTaxi.Drivers.ClockOut(src)
-    TriggerClientEvent('ld_taxi:client:notify', src, 'Dienst beendet.')
-    SendTabletData(src)
+    NotifyAndSync(src, 'Dienst beendet.')
 end)
 
 RegisterNetEvent('ld_taxi:server:takeDispatch', function()
     local src = source
     local ok, msg = LDTaxi.Dispatch.Take(src)
-    TriggerClientEvent('ld_taxi:client:notify', src, msg)
-    SendTabletData(src)
+    NotifyAndSync(src, msg)
 end)
 
 RegisterNetEvent('ld_taxi:server:leaveDispatch', function()
     local src = source
     local ok, msg = LDTaxi.Dispatch.Leave(src)
-    TriggerClientEvent('ld_taxi:client:notify', src, msg)
-    SendTabletData(src)
+    NotifyAndSync(src, msg)
+end)
+
+RegisterNetEvent('ld_taxi:server:acceptOrder', function(orderId)
+    local src = source
+    local ok, msg = LDTaxi.Orders.Accept(orderId, src)
+    NotifyAndSync(src, msg)
+end)
+
+RegisterNetEvent('ld_taxi:server:arriveOrder', function(orderId)
+    local src = source
+    local ok, msg = LDTaxi.Orders.SetStatus(orderId, src, OrderStatus.Arrived, DriverStatus.Arrived, 'Am Abholort angekommen.')
+    NotifyAndSync(src, msg)
+end)
+
+RegisterNetEvent('ld_taxi:server:startOrder', function(orderId)
+    local src = source
+    local ok, msg = LDTaxi.Orders.SetStatus(orderId, src, OrderStatus.Started, DriverStatus.InRide, 'Fahrt gestartet.')
+    NotifyAndSync(src, msg)
+end)
+
+RegisterNetEvent('ld_taxi:server:returnOrder', function(orderId, reason)
+    local src = source
+    local ok, msg = LDTaxi.Orders.Return(orderId, src, reason)
+    NotifyAndSync(src, msg)
+end)
+
+RegisterNetEvent('ld_taxi:server:completeOrder', function(orderId, distanceKm, chargedAmount)
+    local src = source
+    local ok, msg = LDTaxi.Orders.Complete(orderId, src, distanceKm, chargedAmount)
+    NotifyAndSync(src, msg)
 end)
 
 RegisterNetEvent('ld_taxi:server:testOrder', function()
@@ -79,5 +116,5 @@ RegisterNetEvent('ld_taxi:server:testOrder', function()
     })
 
     TriggerClientEvent('ld_taxi:client:notify', src, ('Testauftrag #%s erstellt.'):format(id))
-    SendTabletData(src)
+    BroadcastTabletData()
 end)
