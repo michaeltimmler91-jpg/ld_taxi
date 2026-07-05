@@ -7,10 +7,33 @@ AddEventHandler('onResourceStart', function(resourceName)
     print('^2[ld_taxi]^7 System bereit')
 end)
 
+local function SendTabletData(src)
+    local orders = LDTaxi.Orders.GetOpen()
+    local drivers = LDTaxi.Drivers.GetAll()
+    local dispatchers = LDTaxi.Dispatch.GetActive()
+
+    TriggerClientEvent('ld_tablet:client:taxiData', src, {
+        orders = orders or {},
+        drivers = drivers or {},
+        dispatchers = dispatchers or {},
+        stats = {
+            openOrders = #(orders or {}),
+            drivers = #(drivers or {}),
+            dispatchers = #(dispatchers or {}),
+            maxDispatchers = Config.MaxDispatchers
+        }
+    })
+end
+
+RegisterNetEvent('ld_taxi:server:requestTabletData', function()
+    SendTabletData(source)
+end)
+
 RegisterNetEvent('ld_taxi:server:clockIn', function()
     local src = source
     if LDTaxi.Drivers.ClockIn(src) then
         TriggerClientEvent('ld_taxi:client:notify', src, 'Dienst begonnen.')
+        SendTabletData(src)
     end
 end)
 
@@ -18,18 +41,21 @@ RegisterNetEvent('ld_taxi:server:clockOut', function()
     local src = source
     LDTaxi.Drivers.ClockOut(src)
     TriggerClientEvent('ld_taxi:client:notify', src, 'Dienst beendet.')
+    SendTabletData(src)
 end)
 
 RegisterNetEvent('ld_taxi:server:takeDispatch', function()
     local src = source
     local ok, msg = LDTaxi.Dispatch.Take(src)
     TriggerClientEvent('ld_taxi:client:notify', src, msg)
+    SendTabletData(src)
 end)
 
 RegisterNetEvent('ld_taxi:server:leaveDispatch', function()
     local src = source
     local ok, msg = LDTaxi.Dispatch.Leave(src)
     TriggerClientEvent('ld_taxi:client:notify', src, msg)
+    SendTabletData(src)
 end)
 
 RegisterNetEvent('ld_taxi:server:testOrder', function()
@@ -53,4 +79,5 @@ RegisterNetEvent('ld_taxi:server:testOrder', function()
     })
 
     TriggerClientEvent('ld_taxi:client:notify', src, ('Testauftrag #%s erstellt.'):format(id))
+    SendTabletData(src)
 end)
