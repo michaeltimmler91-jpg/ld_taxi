@@ -1,10 +1,15 @@
 local tabletOpen = false
 
+local function RequestTaxiData()
+    TriggerServerEvent('ld_taxi:server:requestTabletData')
+end
+
 local function OpenTablet()
     if tabletOpen then return end
     tabletOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({ action = 'open' })
+    RequestTaxiData()
 end
 
 local function CloseTablet()
@@ -31,4 +36,16 @@ RegisterKeyMapping('tablet', 'Tablet öffnen/schließen', 'keyboard', 'F6')
 RegisterNUICallback('closeTablet', function(_, cb)
     CloseTablet()
     cb(true)
+end)
+
+RegisterNUICallback('refreshTaxiData', function(_, cb)
+    RequestTaxiData()
+    cb(true)
+end)
+
+RegisterNetEvent('ld_tablet:client:taxiData', function(data)
+    SendNUIMessage({
+        action = 'taxiData',
+        data = data or {}
+    })
 end)
