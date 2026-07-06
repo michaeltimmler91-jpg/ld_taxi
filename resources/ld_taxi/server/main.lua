@@ -91,6 +91,32 @@ RegisterNetEvent('ld_taxi:server:leaveDispatch', function()
     NotifyAndSync(src, msg, 'dispatch.ended')
 end)
 
+RegisterNetEvent('ld_taxi:server:createOrder', function(data)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    local dispatchers = LDTaxi.Dispatch.GetActive()
+    if not xPlayer or not IsDispatcher(xPlayer.identifier, dispatchers) then
+        NotifyAndSync(src, 'Du bist nicht in der Leitstelle.', 'order.create_denied')
+        return
+    end
+
+    data = data or {}
+    local id = LDTaxi.Orders.Create({
+        orderType = data.orderType or OrderType.Person,
+        customerName = data.customerName or '',
+        customerIdentifier = '',
+        pickupLabel = data.pickupLabel or '',
+        pickup = { x = 0.0, y = 0.0, z = 0.0 },
+        destinationLabel = data.destinationLabel or '',
+        destination = { x = 0.0, y = 0.0, z = 0.0 },
+        note = data.note or '',
+        foodCost = tonumber(data.foodCost) or 0,
+        createdBy = xPlayer.identifier
+    })
+
+    NotifyAndSync(src, ('Auftrag #%s erstellt.'):format(id), 'order.created')
+end)
+
 RegisterNetEvent('ld_taxi:server:assignOrder', function(orderId, driverIdentifier, driverName)
     local src = source
     local xPlayer = ESX.GetPlayerFromId(src)
@@ -128,9 +154,9 @@ RegisterNetEvent('ld_taxi:server:returnOrder', function(orderId, reason)
     NotifyAndSync(src, msg, 'order.returned')
 end)
 
-RegisterNetEvent('ld_taxi:server:completeOrder', function(orderId, distanceKm, chargedAmount)
+RegisterNetEvent('ld_taxi:server:completeOrder', function(orderId, distanceKm, chargedAmount, foodPaymentMethod)
     local src = source
-    local ok, msg = LDTaxi.Orders.Complete(orderId, src, distanceKm, chargedAmount)
+    local ok, msg = LDTaxi.Orders.Complete(orderId, src, distanceKm, chargedAmount, foodPaymentMethod)
     NotifyAndSync(src, msg, 'order.completed')
 end)
 
