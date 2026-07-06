@@ -62,6 +62,24 @@ function LDTaxi.Orders.Get(orderId)
     return MySQL.single.await('SELECT * FROM ld_taxi_orders WHERE id = ?', { tonumber(orderId) or 0 })
 end
 
+function LDTaxi.Orders.Assign(orderId, driverIdentifier, driverName, createdBy)
+    local order = LDTaxi.Orders.Get(orderId)
+    if not order then return false, 'Auftrag nicht gefunden.' end
+    if not driverIdentifier or driverIdentifier == '' then return false, 'Kein Fahrer ausgewählt.' end
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_orders
+        SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW()
+        WHERE id = ?
+    ]], { OrderStatus.Accepted, driverIdentifier, driverName or driverIdentifier, tonumber(orderId) })
+
+    LDTaxi.Drivers.SetStatus(driverIdentifier, DriverStatus.EnRoute)
+    LDTaxi.Orders.AddHistory(orderId, 'order.assigned', 'Auftrag zugewiesen', createdBy, { driver = driverIdentifier, driverName = driverName })
+    LDTaxiEventBus.Emit('order.assigned', { orderId = tonumber(orderId), driver = driverIdentifier })
+
+    return true, ('Auftrag #%s zugewiesen.'):format(orderId)
+end
+
 function LDTaxi.Orders.Accept(orderId, source)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
