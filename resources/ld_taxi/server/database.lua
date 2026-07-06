@@ -143,5 +143,31 @@ function LDTaxiDB.Init()
     TryQuery('ALTER TABLE ld_taxi_finance_log ADD COLUMN IF NOT EXISTS expense_reimbursement INT NOT NULL DEFAULT 0')
     TryQuery('ALTER TABLE ld_taxi_finance_log ADD COLUMN IF NOT EXISTS total_payout INT NOT NULL DEFAULT 0')
 
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS ld_taxi_blackboard_posts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(150) NOT NULL,
+            content TEXT NOT NULL,
+            author_identifier VARCHAR(80) NULL,
+            author_name VARCHAR(100) NULL,
+            pinned TINYINT(1) NOT NULL DEFAULT 0,
+            expires_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL,
+            deleted_at DATETIME NULL
+        )
+    ]])
+
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS ld_taxi_blackboard_reads (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            post_id INT NOT NULL,
+            identifier VARCHAR(80) NOT NULL,
+            driver_name VARCHAR(100) NULL,
+            read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_blackboard_read (post_id, identifier)
+        )
+    ]])
+
     print('^2[ld_taxi]^7 Datenbanktabellen geprüft/erstellt')
 end
