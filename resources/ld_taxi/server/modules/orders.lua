@@ -68,112 +68,68 @@ function LDTaxi.Orders.Assign(orderId, driverIdentifier, driverName, createdBy)
     if not order then return false, 'Auftrag nicht gefunden.' end
     if not driverIdentifier or driverIdentifier == '' then return false, 'Kein Fahrer ausgewählt.' end
 
-    MySQL.update.await([[
-        UPDATE ld_taxi_orders
-        SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW()
-        WHERE id = ?
-    ]], { OrderStatus.Accepted, driverIdentifier, driverName or driverIdentifier, tonumber(orderId) })
-
+    MySQL.update.await([[UPDATE ld_taxi_orders SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW() WHERE id = ?]], { OrderStatus.Accepted, driverIdentifier, driverName or driverIdentifier, tonumber(orderId) })
     LDTaxi.Drivers.SetStatus(driverIdentifier, DriverStatus.EnRoute)
     LDTaxi.Orders.AddHistory(orderId, 'order.assigned', 'Auftrag zugewiesen', createdBy, { driver = driverIdentifier, driverName = driverName })
     LDTaxiEventBus.Emit('order.assigned', { orderId = tonumber(orderId), driver = driverIdentifier })
-
     return true, ('Auftrag #%s zugewiesen.'):format(orderId)
 end
 
 function LDTaxi.Orders.Accept(orderId, source)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
-
     local order = LDTaxi.Orders.Get(orderId)
     if not order then return false, 'Auftrag nicht gefunden.' end
-    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
-        return false, 'Auftrag ist bereits vergeben.'
-    end
-
-    MySQL.update.await([[
-        UPDATE ld_taxi_orders
-        SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW()
-        WHERE id = ?
-    ]], { OrderStatus.Accepted, xPlayer.identifier, xPlayer.getName(), tonumber(orderId) })
-
+    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then return false, 'Auftrag ist bereits vergeben.' end
+    MySQL.update.await([[UPDATE ld_taxi_orders SET status = ?, assigned_driver = ?, assigned_driver_name = ?, updated_at = NOW() WHERE id = ?]], { OrderStatus.Accepted, xPlayer.identifier, xPlayer.getName(), tonumber(orderId) })
     LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.EnRoute)
     LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderAccepted, 'Auftrag angenommen', xPlayer.identifier)
     LDTaxiEventBus.Emit(TaxiEvents.OrderAccepted, { orderId = orderId, driver = xPlayer.identifier })
-
     return true, 'Auftrag angenommen.'
 end
 
 function LDTaxi.Orders.SetStatus(orderId, source, status, driverStatus, message)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
-
     local order = LDTaxi.Orders.Get(orderId)
     if not order then return false, 'Auftrag nicht gefunden.' end
-    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
-        return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
-    end
-
+    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then return false, 'Dieser Auftrag gehört einem anderen Fahrer.' end
     MySQL.update.await('UPDATE ld_taxi_orders SET status = ?, updated_at = NOW() WHERE id = ?', { status, tonumber(orderId) })
-
-    if driverStatus then
-        LDTaxi.Drivers.SetStatus(xPlayer.identifier, driverStatus)
-    end
-
+    if driverStatus then LDTaxi.Drivers.SetStatus(xPlayer.identifier, driverStatus) end
     LDTaxi.Orders.AddHistory(orderId, 'order.status_changed', message or status, xPlayer.identifier, { status = status })
     LDTaxiEventBus.Emit('order.status_changed', { orderId = orderId, status = status, driver = xPlayer.identifier })
-
     return true, message or 'Status geändert.'
 end
 
 function LDTaxi.Orders.Return(orderId, source, reason)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
-
-    if reason == 'Kein Fahrgast angetroffen' then
+    if reason == 'Kunde nicht da' then
         local order = LDTaxi.Orders.Get(orderId)
         if not order then return false, 'Auftrag nicht gefunden.' end
-        if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
-            return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
-        end
-
-        MySQL.update.await([[
-            UPDATE ld_taxi_orders
-            SET status = 'cancelled', updated_at = NOW(), completed_at = NOW()
-            WHERE id = ?
-        ]], { tonumber(orderId) })
-
+        if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then return false, 'Dieser Auftrag gehört einem anderen Fahrer.' end
+        MySQL.update.await([[UPDATE ld_taxi_orders SET status = 'cancelled', updated_at = NOW(), completed_at = NOW() WHERE id = ?]], { tonumber(orderId) })
         LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
-        LDTaxi.Orders.AddHistory(orderId, 'order.no_passenger', reason, xPlayer.identifier)
-        LDTaxiEventBus.Emit('order.no_passenger', { orderId = orderId, driver = xPlayer.identifier })
-
-        return true, 'Auftrag entfernt: kein Fahrgast angetroffen.'
+        LDTaxi.Orders.AddHistory(orderId, 'order.customer_missing', reason, xPlayer.identifier)
+        LDTaxiEventBus.Emit('order.customer_missing', { orderId = orderId, driver = xPlayer.identifier })
+        return true, 'Auftrag entfernt: Kunde nicht da.'
     end
-
-    MySQL.update.await([[
-        UPDATE ld_taxi_orders
-        SET status = ?, assigned_driver = NULL, assigned_driver_name = NULL, updated_at = NOW()
-        WHERE id = ?
-    ]], { OrderStatus.Returned, tonumber(orderId) })
-
+    MySQL.update.await([[UPDATE ld_taxi_orders SET status = ?, assigned_driver = NULL, assigned_driver_name = NULL, updated_at = NOW() WHERE id = ?]], { OrderStatus.Returned, tonumber(orderId) })
     LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
     LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderReturned, reason or 'Auftrag zurückgegeben', xPlayer.identifier)
     LDTaxiEventBus.Emit(TaxiEvents.OrderReturned, { orderId = orderId, driver = xPlayer.identifier, reason = reason or '' })
-
     return true, 'Auftrag an die Leitstelle zurückgegeben.'
 end
 
 function LDTaxi.Orders.NoShow(orderId, source, reason)
-    return LDTaxi.Orders.Return(orderId, source, reason or 'Kein Fahrgast angetroffen')
+    return LDTaxi.Orders.Return(orderId, source, reason or 'Kunde nicht da')
 end
 
 function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount, foodPaymentMethod)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
-
     local order = LDTaxi.Orders.Get(orderId)
     if not order then return false, 'Auftrag nicht gefunden.' end
-
     local distance = tonumber(distanceKm) or 0
     local fare = LDTaxi.Utils.CalculateFare(distance)
     local foodCost = tonumber(order.food_cost) or 0
@@ -181,56 +137,21 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount, food
     local charged = tonumber(chargedAmount) or fare
     local minimum = fare + (isFood and foodCost or 0)
     if charged < minimum then charged = minimum end
-
     local tip = charged - fare
     local reimbursement = 0
     if isFood then
         tip = charged - fare - foodCost
         if tip < 0 then tip = 0 end
-        if foodPaymentMethod == 'own_pocket' then
-            reimbursement = foodCost
-        else
-            foodPaymentMethod = 'storage'
-        end
+        if foodPaymentMethod == 'own_pocket' then reimbursement = foodCost else foodPaymentMethod = 'storage' end
     end
-
     if tip < 0 then tip = 0 end
     local totalPayout = tip + reimbursement
-
-    MySQL.update.await([[
-        UPDATE ld_taxi_orders
-        SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?,
-            food_payment_method = ?, expense_reimbursement = ?, total_payout = ?, updated_at = NOW(), completed_at = NOW()
-        WHERE id = ?
-    ]], { OrderStatus.Completed, distance, fare, charged, tip, foodPaymentMethod or '', reimbursement, totalPayout, tonumber(orderId) })
-
-    MySQL.update.await([[
-        UPDATE ld_taxi_drivers
-        SET status = ?, total_orders = total_orders + 1, total_distance = total_distance + ?, last_order_at = NOW()
-        WHERE identifier = ?
-    ]], { DriverStatus.Available, distance, xPlayer.identifier })
-
-    MySQL.insert.await([[
-        INSERT INTO ld_taxi_finance_log (order_id, identifier, driver_name, distance_km, fare_amount, charged_amount, tip_amount, food_cost, expense_reimbursement, total_payout)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], { tonumber(orderId), xPlayer.identifier, xPlayer.getName(), distance, fare, charged, tip, foodCost, reimbursement, totalPayout })
-
-    if tip > 0 then
-        MySQL.insert.await([[
-            INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status)
-            VALUES (?, ?, ?, 'tip', ?, 'open')
-        ]], { xPlayer.identifier, xPlayer.getName(), tip, tonumber(orderId) })
-    end
-
-    if reimbursement > 0 then
-        MySQL.insert.await([[
-            INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status)
-            VALUES (?, ?, ?, 'food_reimbursement', ?, 'open')
-        ]], { xPlayer.identifier, xPlayer.getName(), reimbursement, tonumber(orderId) })
-    end
-
+    MySQL.update.await([[UPDATE ld_taxi_orders SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?, food_payment_method = ?, expense_reimbursement = ?, total_payout = ?, updated_at = NOW(), completed_at = NOW() WHERE id = ?]], { OrderStatus.Completed, distance, fare, charged, tip, foodPaymentMethod or '', reimbursement, totalPayout, tonumber(orderId) })
+    MySQL.update.await([[UPDATE ld_taxi_drivers SET status = ?, total_orders = total_orders + 1, total_distance = total_distance + ?, last_order_at = NOW() WHERE identifier = ?]], { DriverStatus.Available, distance, xPlayer.identifier })
+    MySQL.insert.await([[INSERT INTO ld_taxi_finance_log (order_id, identifier, driver_name, distance_km, fare_amount, charged_amount, tip_amount, food_cost, expense_reimbursement, total_payout) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]], { tonumber(orderId), xPlayer.identifier, xPlayer.getName(), distance, fare, charged, tip, foodCost, reimbursement, totalPayout })
+    if tip > 0 then MySQL.insert.await([[INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status) VALUES (?, ?, ?, 'tip', ?, 'open')]], { xPlayer.identifier, xPlayer.getName(), tip, tonumber(orderId) }) end
+    if reimbursement > 0 then MySQL.insert.await([[INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status) VALUES (?, ?, ?, 'food_reimbursement', ?, 'open')]], { xPlayer.identifier, xPlayer.getName(), reimbursement, tonumber(orderId) }) end
     LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCompleted, 'Auftrag abgeschlossen', xPlayer.identifier, { fare = fare, charged = charged, tip = tip, foodCost = foodCost, reimbursement = reimbursement })
     LDTaxiEventBus.Emit(TaxiEvents.OrderCompleted, { orderId = orderId, driver = xPlayer.identifier, fare = fare, charged = charged, tip = tip, reimbursement = reimbursement })
-
     return true, ('Auftrag abgeschlossen. Fahrt: %s $, Rechnung: %s $, Trinkgeld: %s $, Erstattung: %s $'):format(fare, charged, tip, reimbursement)
 end
