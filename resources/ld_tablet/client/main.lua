@@ -83,6 +83,11 @@ RegisterNUICallback('leaveDispatch', function(_, cb)
     cb(true)
 end)
 
+RegisterNUICallback('createOrder', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:createOrder', data or {})
+    cb(true)
+end)
+
 RegisterNUICallback('markPayoutPaid', function(data, cb)
     TriggerServerEvent('ld_taxi:server:markPayoutPaid', data and data.identifier or '')
     cb(true)
@@ -116,7 +121,7 @@ RegisterNUICallback('orderAction', function(data, cb)
     elseif action == 'return' then
         TriggerServerEvent('ld_taxi:server:returnOrder', orderId, data.reason or 'Vom Tablet zurückgegeben')
     elseif action == 'complete' then
-        TriggerServerEvent('ld_taxi:server:completeOrder', orderId, data.distance or 1, data.charged or 5)
+        TriggerServerEvent('ld_taxi:server:completeOrder', orderId, data.distance or 1, data.charged or 5, data.foodPaymentMethod or '')
     end
 
     cb(true)
