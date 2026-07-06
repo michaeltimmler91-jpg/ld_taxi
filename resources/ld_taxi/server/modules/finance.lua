@@ -7,6 +7,9 @@ function LDTaxi.Finance.GetSummary()
             COALESCE(SUM(charged_amount), 0) AS revenue,
             COALESCE(SUM(fare_amount), 0) AS fare,
             COALESCE(SUM(tip_amount), 0) AS tips,
+            COALESCE(SUM(food_cost), 0) AS food,
+            COALESCE(SUM(expense_reimbursement), 0) AS reimbursement,
+            COALESCE(SUM(total_payout), 0) AS payout,
             COALESCE(SUM(distance_km), 0) AS distance,
             COUNT(*) AS rides
         FROM ld_taxi_finance_log
@@ -20,14 +23,20 @@ function LDTaxi.Finance.GetSummary()
     ]]) or {}
 
     local lastRides = MySQL.query.await([[
-        SELECT order_id, driver_name, distance_km, fare_amount, charged_amount, tip_amount, created_at
+        SELECT order_id, driver_name, distance_km, fare_amount, charged_amount, tip_amount, food_cost, expense_reimbursement, total_payout, created_at
         FROM ld_taxi_finance_log
         ORDER BY created_at DESC
         LIMIT 10
     ]]) or {}
 
     local payouts = MySQL.query.await([[
-        SELECT identifier, driver_name, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS count
+        SELECT
+            identifier,
+            driver_name,
+            COALESCE(SUM(amount), 0) AS amount,
+            COALESCE(SUM(CASE WHEN source_type = 'tip' THEN amount ELSE 0 END), 0) AS tips,
+            COALESCE(SUM(CASE WHEN source_type = 'food_reimbursement' THEN amount ELSE 0 END), 0) AS reimbursement,
+            COUNT(*) AS count
         FROM ld_taxi_payouts
         WHERE status = 'open'
         GROUP BY identifier, driver_name
