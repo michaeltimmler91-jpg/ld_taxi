@@ -73,6 +73,16 @@ RegisterNUICallback('refreshTaxiData', function(_, cb)
     cb(true)
 end)
 
+RegisterNUICallback('takeDispatch', function(_, cb)
+    TriggerServerEvent('ld_taxi:server:takeDispatch')
+    cb(true)
+end)
+
+RegisterNUICallback('leaveDispatch', function(_, cb)
+    TriggerServerEvent('ld_taxi:server:leaveDispatch')
+    cb(true)
+end)
+
 RegisterNUICallback('markPayoutPaid', function(data, cb)
     TriggerServerEvent('ld_taxi:server:markPayoutPaid', data and data.identifier or '')
     cb(true)
