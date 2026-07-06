@@ -91,6 +91,19 @@ RegisterNetEvent('ld_taxi:server:leaveDispatch', function()
     NotifyAndSync(src, msg, 'dispatch.ended')
 end)
 
+RegisterNetEvent('ld_taxi:server:assignOrder', function(orderId, driverIdentifier, driverName)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    local dispatchers = LDTaxi.Dispatch.GetActive()
+    if not xPlayer or not IsDispatcher(xPlayer.identifier, dispatchers) then
+        NotifyAndSync(src, 'Du bist nicht in der Leitstelle.', 'order.assign_denied')
+        return
+    end
+
+    local ok, msg = LDTaxi.Orders.Assign(orderId, driverIdentifier, driverName, xPlayer.identifier)
+    NotifyAndSync(src, msg, ok and 'order.assigned' or 'order.assign_failed')
+end)
+
 RegisterNetEvent('ld_taxi:server:acceptOrder', function(orderId)
     local src = source
     local ok, msg = LDTaxi.Orders.Accept(orderId, src)
