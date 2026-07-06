@@ -88,6 +88,26 @@ RegisterNUICallback('createOrder', function(data, cb)
     cb(true)
 end)
 
+RegisterNUICallback('blackboardCreate', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:blackboardCreate', data or {})
+    cb(true)
+end)
+
+RegisterNUICallback('blackboardRead', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:blackboardRead', data and data.postId or 0)
+    cb(true)
+end)
+
+RegisterNUICallback('blackboardDelete', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:blackboardDelete', data and data.postId or 0)
+    cb(true)
+end)
+
+RegisterNUICallback('blackboardPin', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:blackboardPin', data and data.postId or 0)
+    cb(true)
+end)
+
 RegisterNUICallback('markPayoutPaid', function(data, cb)
     TriggerServerEvent('ld_taxi:server:markPayoutPaid', data and data.identifier or '')
     cb(true)
