@@ -11,11 +11,13 @@ local function SendTabletData(src, eventName, message)
     local orders = LDTaxi.Orders.GetOpen()
     local drivers = LDTaxi.Drivers.GetAll()
     local dispatchers = LDTaxi.Dispatch.GetActive()
+    local finance = LDTaxi.Finance.GetSummary()
 
     TriggerClientEvent('ld_tablet:client:taxiData', src, {
         orders = orders or {},
         drivers = drivers or {},
         dispatchers = dispatchers or {},
+        finance = finance or {},
         event = eventName or '',
         message = message or '',
         stats = {
@@ -40,6 +42,13 @@ end
 
 RegisterNetEvent('ld_taxi:server:requestTabletData', function()
     SendTabletData(source)
+end)
+
+RegisterNetEvent('ld_taxi:server:markPayoutPaid', function(identifier)
+    local src = source
+    if LDTaxi.Finance.MarkPaid(identifier) then
+        NotifyAndSync(src, 'Trinkgeld-Auszahlung markiert.', 'finance.paid')
+    end
 end)
 
 RegisterNetEvent('ld_taxi:server:clockIn', function()
