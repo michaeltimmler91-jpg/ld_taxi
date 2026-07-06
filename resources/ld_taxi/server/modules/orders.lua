@@ -131,6 +131,7 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
     local distance = tonumber(distanceKm) or 0
     local fare = LDTaxi.Utils.CalculateFare(distance)
     local charged = tonumber(chargedAmount) or fare
+    if charged < fare then charged = fare end
     local tip = charged - fare
     if tip < 0 then tip = 0 end
 
