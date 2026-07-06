@@ -25,8 +25,8 @@ function LDTaxi.Orders.Create(data)
     local orderId = MySQL.insert.await([[
         INSERT INTO ld_taxi_orders
         (order_type, status, customer_name, customer_identifier, pickup_label, pickup_x, pickup_y, pickup_z,
-         destination_label, destination_x, destination_y, destination_z, note, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         destination_label, destination_x, destination_y, destination_z, note, food_cost, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]], {
         data.orderType or OrderType.Person,
         OrderStatus.Dispatch,
@@ -41,10 +41,11 @@ function LDTaxi.Orders.Create(data)
         tonumber(data.destination.y) or 0.0,
         tonumber(data.destination.z) or 0.0,
         data.note or '',
+        tonumber(data.foodCost) or 0,
         data.createdBy or ''
     })
 
-    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCreated, 'Auftrag erstellt', data.createdBy)
+    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCreated, 'Auftrag erstellt', data.createdBy, { orderType = data.orderType, foodCost = data.foodCost })
     LDTaxiEventBus.Emit(TaxiEvents.OrderCreated, { orderId = orderId })
 
     return orderId
@@ -142,22 +143,42 @@ function LDTaxi.Orders.Return(orderId, source, reason)
     return true, 'Auftrag zurückgegeben.'
 end
 
-function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
+function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount, foodPaymentMethod)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
 
+    local order = LDTaxi.Orders.Get(orderId)
+    if not order then return false, 'Auftrag nicht gefunden.' end
+
     local distance = tonumber(distanceKm) or 0
     local fare = LDTaxi.Utils.CalculateFare(distance)
+    local foodCost = tonumber(order.food_cost) or 0
+    local isFood = order.order_type == 'food' or order.order_type == 'delivery' or order.order_type == 'essen'
     local charged = tonumber(chargedAmount) or fare
-    if charged < fare then charged = fare end
+    local minimum = fare + (isFood and foodCost or 0)
+    if charged < minimum then charged = minimum end
+
     local tip = charged - fare
+    local reimbursement = 0
+    if isFood then
+        tip = charged - fare - foodCost
+        if tip < 0 then tip = 0 end
+        if foodPaymentMethod == 'own_pocket' then
+            reimbursement = foodCost
+        else
+            foodPaymentMethod = 'storage'
+        end
+    end
+
     if tip < 0 then tip = 0 end
+    local totalPayout = tip + reimbursement
 
     MySQL.update.await([[
         UPDATE ld_taxi_orders
-        SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?, updated_at = NOW(), completed_at = NOW()
+        SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?,
+            food_payment_method = ?, expense_reimbursement = ?, total_payout = ?, updated_at = NOW(), completed_at = NOW()
         WHERE id = ?
-    ]], { OrderStatus.Completed, distance, fare, charged, tip, tonumber(orderId) })
+    ]], { OrderStatus.Completed, distance, fare, charged, tip, foodPaymentMethod or '', reimbursement, totalPayout, tonumber(orderId) })
 
     MySQL.update.await([[
         UPDATE ld_taxi_drivers
@@ -166,9 +187,9 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
     ]], { DriverStatus.Available, distance, xPlayer.identifier })
 
     MySQL.insert.await([[
-        INSERT INTO ld_taxi_finance_log (order_id, identifier, driver_name, distance_km, fare_amount, charged_amount, tip_amount)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ]], { tonumber(orderId), xPlayer.identifier, xPlayer.getName(), distance, fare, charged, tip })
+        INSERT INTO ld_taxi_finance_log (order_id, identifier, driver_name, distance_km, fare_amount, charged_amount, tip_amount, food_cost, expense_reimbursement, total_payout)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ]], { tonumber(orderId), xPlayer.identifier, xPlayer.getName(), distance, fare, charged, tip, foodCost, reimbursement, totalPayout })
 
     if tip > 0 then
         MySQL.insert.await([[
@@ -177,8 +198,15 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
         ]], { xPlayer.identifier, xPlayer.getName(), tip, tonumber(orderId) })
     end
 
-    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCompleted, 'Auftrag abgeschlossen', xPlayer.identifier, { fare = fare, charged = charged, tip = tip })
-    LDTaxiEventBus.Emit(TaxiEvents.OrderCompleted, { orderId = orderId, driver = xPlayer.identifier, fare = fare, charged = charged, tip = tip })
+    if reimbursement > 0 then
+        MySQL.insert.await([[
+            INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status)
+            VALUES (?, ?, ?, 'food_reimbursement', ?, 'open')
+        ]], { xPlayer.identifier, xPlayer.getName(), reimbursement, tonumber(orderId) })
+    end
 
-    return true, ('Auftrag abgeschlossen. Fahrt: %s $, Rechnung: %s $, Trinkgeld: %s $'):format(fare, charged, tip)
+    LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCompleted, 'Auftrag abgeschlossen', xPlayer.identifier, { fare = fare, charged = charged, tip = tip, foodCost = foodCost, reimbursement = reimbursement })
+    LDTaxiEventBus.Emit(TaxiEvents.OrderCompleted, { orderId = orderId, driver = xPlayer.identifier, fare = fare, charged = charged, tip = tip, reimbursement = reimbursement })
+
+    return true, ('Auftrag abgeschlossen. Fahrt: %s $, Rechnung: %s $, Trinkgeld: %s $, Erstattung: %s $'):format(fare, charged, tip, reimbursement)
 end
