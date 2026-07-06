@@ -128,7 +128,8 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
 
-    local fare = LDTaxi.Utils.CalculateFare(distanceKm)
+    local distance = tonumber(distanceKm) or 0
+    local fare = LDTaxi.Utils.CalculateFare(distance)
     local charged = tonumber(chargedAmount) or fare
     local tip = charged - fare
     if tip < 0 then tip = 0 end
@@ -137,16 +138,28 @@ function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount)
         UPDATE ld_taxi_orders
         SET status = ?, distance_km = ?, fare_amount = ?, charged_amount = ?, tip_amount = ?, updated_at = NOW(), completed_at = NOW()
         WHERE id = ?
-    ]], { OrderStatus.Completed, tonumber(distanceKm) or 0, fare, charged, tip, tonumber(orderId) })
+    ]], { OrderStatus.Completed, distance, fare, charged, tip, tonumber(orderId) })
 
     MySQL.update.await([[
         UPDATE ld_taxi_drivers
         SET status = ?, total_orders = total_orders + 1, total_distance = total_distance + ?, last_order_at = NOW()
         WHERE identifier = ?
-    ]], { DriverStatus.Available, tonumber(distanceKm) or 0, xPlayer.identifier })
+    ]], { DriverStatus.Available, distance, xPlayer.identifier })
+
+    MySQL.insert.await([[
+        INSERT INTO ld_taxi_finance_log (order_id, identifier, driver_name, distance_km, fare_amount, charged_amount, tip_amount)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ]], { tonumber(orderId), xPlayer.identifier, xPlayer.getName(), distance, fare, charged, tip })
+
+    if tip > 0 then
+        MySQL.insert.await([[
+            INSERT INTO ld_taxi_payouts (identifier, driver_name, amount, source_type, order_id, status)
+            VALUES (?, ?, ?, 'tip', ?, 'open')
+        ]], { xPlayer.identifier, xPlayer.getName(), tip, tonumber(orderId) })
+    end
 
     LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderCompleted, 'Auftrag abgeschlossen', xPlayer.identifier, { fare = fare, charged = charged, tip = tip })
     LDTaxiEventBus.Emit(TaxiEvents.OrderCompleted, { orderId = orderId, driver = xPlayer.identifier, fare = fare, charged = charged, tip = tip })
 
-    return true, ('Auftrag abgeschlossen. Trinkgeld: %s $'):format(tip)
+    return true, ('Auftrag abgeschlossen. Fahrt: %s $, Rechnung: %s $, Trinkgeld: %s $'):format(fare, charged, tip)
 end
