@@ -90,5 +90,33 @@ function LDTaxiDB.Init()
         )
     ]])
 
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS ld_taxi_payouts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            identifier VARCHAR(80) NOT NULL,
+            driver_name VARCHAR(100) NULL,
+            amount INT NOT NULL DEFAULT 0,
+            source_type VARCHAR(50) NOT NULL DEFAULT 'tip',
+            order_id INT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'open',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at DATETIME NULL
+        )
+    ]])
+
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS ld_taxi_finance_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            order_id INT NULL,
+            identifier VARCHAR(80) NULL,
+            driver_name VARCHAR(100) NULL,
+            distance_km DOUBLE NOT NULL DEFAULT 0,
+            fare_amount INT NOT NULL DEFAULT 0,
+            charged_amount INT NOT NULL DEFAULT 0,
+            tip_amount INT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    ]])
+
     print('^2[ld_taxi]^7 Datenbanktabellen geprüft/erstellt')
 end
