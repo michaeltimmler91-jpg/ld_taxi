@@ -23,6 +23,7 @@ server_scripts {
     'server/modules/orders.lua',
     'server/modules/dispatch.lua',
     'server/modules/finance.lua',
+    'server/modules/blackboard.lua',
     'server/main.lua'
 }
 
