@@ -140,7 +140,30 @@ function LDTaxi.Orders.Return(orderId, source, reason)
     LDTaxi.Orders.AddHistory(orderId, TaxiEvents.OrderReturned, reason or 'Auftrag zurückgegeben', xPlayer.identifier)
     LDTaxiEventBus.Emit(TaxiEvents.OrderReturned, { orderId = orderId, driver = xPlayer.identifier, reason = reason or '' })
 
-    return true, 'Auftrag zurückgegeben.'
+    return true, 'Auftrag an die Leitstelle zurückgegeben.'
+end
+
+function LDTaxi.Orders.NoShow(orderId, source, reason)
+    local xPlayer = LDTaxi.Utils.Player(source)
+    if not xPlayer then return false, 'Spieler nicht gefunden.' end
+
+    local order = LDTaxi.Orders.Get(orderId)
+    if not order then return false, 'Auftrag nicht gefunden.' end
+    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
+        return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
+    end
+
+    MySQL.update.await([[
+        UPDATE ld_taxi_orders
+        SET status = 'cancelled', updated_at = NOW(), completed_at = NOW()
+        WHERE id = ?
+    ]], { tonumber(orderId) })
+
+    LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
+    LDTaxi.Orders.AddHistory(orderId, 'order.no_show', reason or 'Kein Fahrgast angetroffen', xPlayer.identifier)
+    LDTaxiEventBus.Emit('order.no_show', { orderId = orderId, driver = xPlayer.identifier })
+
+    return true, 'Auftrag gelöscht: kein Fahrgast angetroffen.'
 end
 
 function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount, foodPaymentMethod)
