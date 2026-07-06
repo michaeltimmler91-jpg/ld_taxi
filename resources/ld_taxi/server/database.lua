@@ -1,5 +1,14 @@
 LDTaxiDB = {}
 
+local function TryQuery(sql)
+    local ok, err = pcall(function()
+        MySQL.query.await(sql)
+    end)
+    if not ok then
+        print(('^3[ld_taxi]^7 DB-Hinweis: %s'):format(tostring(err)))
+    end
+end
+
 function LDTaxiDB.Init()
     MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS ld_taxi_events (
@@ -65,6 +74,10 @@ function LDTaxiDB.Init()
             destination_y DOUBLE NULL,
             destination_z DOUBLE NULL,
             note TEXT NULL,
+            food_cost INT NOT NULL DEFAULT 0,
+            food_payment_method VARCHAR(50) NULL,
+            expense_reimbursement INT NOT NULL DEFAULT 0,
+            total_payout INT NOT NULL DEFAULT 0,
             assigned_driver VARCHAR(80) NULL,
             assigned_driver_name VARCHAR(100) NULL,
             distance_km DOUBLE NULL,
@@ -77,6 +90,11 @@ function LDTaxiDB.Init()
             completed_at DATETIME NULL
         )
     ]])
+
+    TryQuery('ALTER TABLE ld_taxi_orders ADD COLUMN IF NOT EXISTS food_cost INT NOT NULL DEFAULT 0')
+    TryQuery('ALTER TABLE ld_taxi_orders ADD COLUMN IF NOT EXISTS food_payment_method VARCHAR(50) NULL')
+    TryQuery('ALTER TABLE ld_taxi_orders ADD COLUMN IF NOT EXISTS expense_reimbursement INT NOT NULL DEFAULT 0')
+    TryQuery('ALTER TABLE ld_taxi_orders ADD COLUMN IF NOT EXISTS total_payout INT NOT NULL DEFAULT 0')
 
     MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS ld_taxi_order_history (
@@ -114,9 +132,16 @@ function LDTaxiDB.Init()
             fare_amount INT NOT NULL DEFAULT 0,
             charged_amount INT NOT NULL DEFAULT 0,
             tip_amount INT NOT NULL DEFAULT 0,
+            food_cost INT NOT NULL DEFAULT 0,
+            expense_reimbursement INT NOT NULL DEFAULT 0,
+            total_payout INT NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     ]])
+
+    TryQuery('ALTER TABLE ld_taxi_finance_log ADD COLUMN IF NOT EXISTS food_cost INT NOT NULL DEFAULT 0')
+    TryQuery('ALTER TABLE ld_taxi_finance_log ADD COLUMN IF NOT EXISTS expense_reimbursement INT NOT NULL DEFAULT 0')
+    TryQuery('ALTER TABLE ld_taxi_finance_log ADD COLUMN IF NOT EXISTS total_payout INT NOT NULL DEFAULT 0')
 
     print('^2[ld_taxi]^7 Datenbanktabellen geprüft/erstellt')
 end
