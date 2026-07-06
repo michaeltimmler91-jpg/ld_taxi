@@ -22,6 +22,7 @@ server_scripts {
     'server/modules/drivers.lua',
     'server/modules/orders.lua',
     'server/modules/dispatch.lua',
+    'server/modules/finance.lua',
     'server/main.lua'
 }
 
