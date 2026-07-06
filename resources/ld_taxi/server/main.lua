@@ -22,23 +22,33 @@ local function SendTabletData(src, eventName, message)
     local drivers = LDTaxi.Drivers.GetAll()
     local dispatchers = LDTaxi.Dispatch.GetActive()
     local finance = LDTaxi.Finance.GetSummary()
+    local blackboard = LDTaxi.Blackboard.GetAll(identifier)
 
     TriggerClientEvent('ld_tablet:client:taxiData', src, {
         self = {
             identifier = identifier,
             name = xPlayer and xPlayer.getName() or '',
-            isDispatcher = IsDispatcher(identifier, dispatchers)
+            isDispatcher = IsDispatcher(identifier, dispatchers),
+            canManageBlackboard = LDTaxi.Blackboard.CanManage(src)
         },
         orders = orders or {},
         drivers = drivers or {},
         dispatchers = dispatchers or {},
         finance = finance or {},
+        blackboard = blackboard or {},
         event = eventName or '',
         message = message or '',
         stats = {
             openOrders = #(orders or {}),
             drivers = #(drivers or {}),
             dispatchers = #(dispatchers or {}),
+            unreadBlackboard = #(function()
+                local unread = {}
+                for _, post in ipairs(blackboard or {}) do
+                    if tonumber(post.is_read) ~= 1 then unread[#unread + 1] = post end
+                end
+                return unread
+            end)(),
             maxDispatchers = Config.MaxDispatchers
         }
     })
@@ -57,6 +67,30 @@ end
 
 RegisterNetEvent('ld_taxi:server:requestTabletData', function()
     SendTabletData(source)
+end)
+
+RegisterNetEvent('ld_taxi:server:blackboardCreate', function(data)
+    local src = source
+    local ok, msg = LDTaxi.Blackboard.Create(src, data)
+    NotifyAndSync(src, msg, ok and 'blackboard.created' or 'blackboard.failed')
+end)
+
+RegisterNetEvent('ld_taxi:server:blackboardRead', function(postId)
+    local src = source
+    local ok, msg = LDTaxi.Blackboard.MarkRead(src, postId)
+    NotifyAndSync(src, msg, ok and 'blackboard.read' or 'blackboard.failed')
+end)
+
+RegisterNetEvent('ld_taxi:server:blackboardDelete', function(postId)
+    local src = source
+    local ok, msg = LDTaxi.Blackboard.Delete(src, postId)
+    NotifyAndSync(src, msg, ok and 'blackboard.deleted' or 'blackboard.failed')
+end)
+
+RegisterNetEvent('ld_taxi:server:blackboardPin', function(postId)
+    local src = source
+    local ok, msg = LDTaxi.Blackboard.TogglePinned(src, postId)
+    NotifyAndSync(src, msg, ok and 'blackboard.pinned' or 'blackboard.failed')
 end)
 
 RegisterNetEvent('ld_taxi:server:markPayoutPaid', function(identifier)
