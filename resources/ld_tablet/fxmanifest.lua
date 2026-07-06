@@ -16,5 +16,7 @@ ui_page 'web/index.html'
 files {
     'web/index.html',
     'web/style.css',
-    'web/app.js'
+    'web/driver-status.css',
+    'web/app.js',
+    'web/driver-status.js'
 }
