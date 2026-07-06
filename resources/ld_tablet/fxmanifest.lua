@@ -17,6 +17,8 @@ files {
     'web/index.html',
     'web/style.css',
     'web/driver-status.css',
+    'web/blackboard.css',
     'web/app.js',
-    'web/driver-status.js'
+    'web/driver-status.js',
+    'web/blackboard.js'
 }
