@@ -7,13 +7,28 @@ AddEventHandler('onResourceStart', function(resourceName)
     print('^2[ld_taxi]^7 System bereit')
 end)
 
+local function IsDispatcher(identifier, dispatchers)
+    if not identifier then return false end
+    for _, dispatcher in ipairs(dispatchers or {}) do
+        if dispatcher.identifier == identifier then return true end
+    end
+    return false
+end
+
 local function SendTabletData(src, eventName, message)
+    local xPlayer = ESX.GetPlayerFromId(src)
+    local identifier = xPlayer and xPlayer.identifier or ''
     local orders = LDTaxi.Orders.GetOpen()
     local drivers = LDTaxi.Drivers.GetAll()
     local dispatchers = LDTaxi.Dispatch.GetActive()
     local finance = LDTaxi.Finance.GetSummary()
 
     TriggerClientEvent('ld_tablet:client:taxiData', src, {
+        self = {
+            identifier = identifier,
+            name = xPlayer and xPlayer.getName() or '',
+            isDispatcher = IsDispatcher(identifier, dispatchers)
+        },
         orders = orders or {},
         drivers = drivers or {},
         dispatchers = dispatchers or {},
