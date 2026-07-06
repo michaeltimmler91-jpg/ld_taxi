@@ -73,6 +73,11 @@ RegisterNUICallback('refreshTaxiData', function(_, cb)
     cb(true)
 end)
 
+RegisterNUICallback('markPayoutPaid', function(data, cb)
+    TriggerServerEvent('ld_taxi:server:markPayoutPaid', data and data.identifier or '')
+    cb(true)
+end)
+
 RegisterNUICallback('setWaypoint', function(data, cb)
     local x = tonumber(data and data.x)
     local y = tonumber(data and data.y)
