@@ -6,14 +6,16 @@ const topbar=document.getElementById('topbar');
 const pageTitle=document.getElementById('page-title');
 const backBtn=document.getElementById('back');
 const homeBtn=document.getElementById('home');
+const toastBox=document.getElementById('toast-box');
 let taxiData={orders:[],drivers:[],dispatchers:[],stats:{openOrders:0,drivers:0,dispatchers:0,maxDispatchers:2}};
-let historyStack=[];let currentPage='home';
+let historyStack=[];let currentPage='home';let lastEvent='';
 function tile(page,icon,label){return '<button class="tile" data-page="'+page+'"><b>'+icon+'</b>'+label+'</button>';}
 function card(title,value){return '<div class="card"><small>'+title+'</small><strong>'+value+'</strong></div>';}
 function row(text,status){return '<div class="row"><span>'+text+'</span><span class="pill">'+status+'</span></div>';}
 function info(text){return '<div class="card"><small>Info</small><strong style="font-size:20px">'+text+'</strong></div>';}
 function activeDrivers(){return (taxiData.drivers||[]).filter(function(d){return d.status!=='offline'&&d.status!=='pause';}).length;}
 function waitingOrders(){return (taxiData.orders||[]).filter(function(o){return o.status==='new'||o.status==='dispatch'||o.status==='returned';}).length;}
+function showToast(title,msg){if(!toastBox)return;let t=document.createElement('div');t.className='toast';t.innerHTML=title+'<small>'+(msg||'')+'</small>';toastBox.appendChild(t);setTimeout(function(){t.remove();},3500);}
 function orderButtons(o){let id=o.id;let html='';html+='<button data-gps-order="'+id+'">GPS</button>';if(o.status==='dispatch'||o.status==='returned'||o.status==='new'){html+='<button data-order-action="accept" data-order-id="'+id+'">Annehmen</button>';}if(o.status==='accepted'){html+='<button data-order-action="arrive" data-order-id="'+id+'">Vor Ort</button>';}if(o.status==='arrived'){html+='<button data-order-action="start" data-order-id="'+id+'">Starten</button>';}if(o.status==='started'){html+='<button data-order-action="complete" data-order-id="'+id+'">Abschließen</button>';}if(o.status!=='completed'){html+='<button class="danger" data-order-action="return" data-order-id="'+id+'">Zurück</button>';}return '<div class="actions">'+html+'</div>';}
 function orderRow(o){let title='#'+o.id+' · '+(o.pickup_label||'Abholort unbekannt');let sub=(o.customer_name||'Kunde unbekannt')+' · '+(o.assigned_driver_name||'nicht vergeben');return '<div class="row"><div class="row-main"><span>'+title+'</span><small>'+sub+'</small></div><div><span class="pill">'+(o.status||'offen')+'</span>'+orderButtons(o)+'</div></div>';}
 const pages={
@@ -30,6 +32,6 @@ function post(name,payload){fetch('https://'+GetParentResourceName()+'/'+name,{m
 function closeTablet(){post('closeTablet');}
 function refreshTaxiData(){post('refreshTaxiData');}
 function setGpsForOrder(orderId){let o=(taxiData.orders||[]).find(function(item){return Number(item.id)===Number(orderId);});if(!o)return;let x=o.pickup_x;let y=o.pickup_y;if(o.status==='started'&&o.destination_x&&o.destination_y){x=o.destination_x;y=o.destination_y;}post('setWaypoint',{x:x,y:y});}
-function handleOrderAction(action,orderId){let payload={action:action,orderId:Number(orderId)};if(action==='return'){payload.reason='Vom Tablet zurückgegeben';}if(action==='complete'){payload.distance=1;payload.charged=5;}post('orderAction',payload);setTimeout(refreshTaxiData,400);}
-window.addEventListener('message',function(event){let data=event.data||{};if(data.action==='open'){tablet.classList.remove('hidden');openPage('home',false);refreshTaxiData();}if(data.action==='close')tablet.classList.add('hidden');if(data.action==='reset')localStorage.removeItem('ld_tablet_settings');if(data.action==='taxiData'){taxiData=data.data||taxiData;openPage(currentPage,false);}});
+function handleOrderAction(action,orderId){let payload={action:action,orderId:Number(orderId)};if(action==='return'){payload.reason='Vom Tablet zurückgegeben';}if(action==='complete'){payload.distance=1;payload.charged=5;}post('orderAction',payload);}
+window.addEventListener('message',function(event){let data=event.data||{};if(data.action==='open'){tablet.classList.remove('hidden');openPage('home',false);refreshTaxiData();}if(data.action==='close')tablet.classList.add('hidden');if(data.action==='reset')localStorage.removeItem('ld_tablet_settings');if(data.action==='taxiData'){let key=(data.data&&data.data.event?data.data.event:'')+'|'+(data.data&&data.data.message?data.data.message:'');taxiData=data.data||taxiData;openPage(currentPage,false);if(data.data&&data.data.event&&key!==lastEvent){lastEvent=key;showToast('TaxiOS',data.data.message||data.data.event);}}});
 closeBtn.addEventListener('click',closeTablet);homeBtn.addEventListener('click',function(){historyStack=[];openPage('home',false);});backBtn.addEventListener('click',function(){openPage(historyStack.pop()||'home',false);});document.addEventListener('keydown',function(e){if(e.key==='Escape')closeTablet();});setInterval(function(){let now=new Date();timeEl.textContent=now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});},1000);openPage('home',false);
