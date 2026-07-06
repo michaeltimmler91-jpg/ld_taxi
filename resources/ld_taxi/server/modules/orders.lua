@@ -130,6 +130,26 @@ function LDTaxi.Orders.Return(orderId, source, reason)
     local xPlayer = LDTaxi.Utils.Player(source)
     if not xPlayer then return false, 'Spieler nicht gefunden.' end
 
+    if reason == 'Kein Fahrgast angetroffen' then
+        local order = LDTaxi.Orders.Get(orderId)
+        if not order then return false, 'Auftrag nicht gefunden.' end
+        if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
+            return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
+        end
+
+        MySQL.update.await([[
+            UPDATE ld_taxi_orders
+            SET status = 'cancelled', updated_at = NOW(), completed_at = NOW()
+            WHERE id = ?
+        ]], { tonumber(orderId) })
+
+        LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
+        LDTaxi.Orders.AddHistory(orderId, 'order.no_passenger', reason, xPlayer.identifier)
+        LDTaxiEventBus.Emit('order.no_passenger', { orderId = orderId, driver = xPlayer.identifier })
+
+        return true, 'Auftrag entfernt: kein Fahrgast angetroffen.'
+    end
+
     MySQL.update.await([[
         UPDATE ld_taxi_orders
         SET status = ?, assigned_driver = NULL, assigned_driver_name = NULL, updated_at = NOW()
@@ -144,26 +164,7 @@ function LDTaxi.Orders.Return(orderId, source, reason)
 end
 
 function LDTaxi.Orders.NoShow(orderId, source, reason)
-    local xPlayer = LDTaxi.Utils.Player(source)
-    if not xPlayer then return false, 'Spieler nicht gefunden.' end
-
-    local order = LDTaxi.Orders.Get(orderId)
-    if not order then return false, 'Auftrag nicht gefunden.' end
-    if order.assigned_driver and order.assigned_driver ~= '' and order.assigned_driver ~= xPlayer.identifier then
-        return false, 'Dieser Auftrag gehört einem anderen Fahrer.'
-    end
-
-    MySQL.update.await([[
-        UPDATE ld_taxi_orders
-        SET status = 'cancelled', updated_at = NOW(), completed_at = NOW()
-        WHERE id = ?
-    ]], { tonumber(orderId) })
-
-    LDTaxi.Drivers.SetStatus(xPlayer.identifier, DriverStatus.Available)
-    LDTaxi.Orders.AddHistory(orderId, 'order.no_show', reason or 'Kein Fahrgast angetroffen', xPlayer.identifier)
-    LDTaxiEventBus.Emit('order.no_show', { orderId = orderId, driver = xPlayer.identifier })
-
-    return true, 'Auftrag gelöscht: kein Fahrgast angetroffen.'
+    return LDTaxi.Orders.Return(orderId, source, reason or 'Kein Fahrgast angetroffen')
 end
 
 function LDTaxi.Orders.Complete(orderId, source, distanceKm, chargedAmount, foodPaymentMethod)
